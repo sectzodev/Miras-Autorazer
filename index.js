@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, AuditLogEvent, PermissionsBitField, Colors } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, AuditLogEvent, ActivityType, Colors } = require('discord.js');
 const { joinVoiceChannel } = require('@discordjs/voice');
 const express = require('express');
 const axios = require('axios');
@@ -47,13 +47,24 @@ async function logGonder(baslik, aciklama, renk = Colors.Blue, thumbnail = null)
     kanal.send({ embeds: [embed] }).catch(() => {});
 }
 
+// --- DENETİM KAYDI (AUDIT LOG) YAKALAYICI ---
+async function getExecutor(guild, type) {
+    try {
+        const fetchedLogs = await guild.fetchAuditLogs({ limit: 1, type: type });
+        const log = fetchedLogs.entries.first();
+        if (!log) return null;
+        if (Date.now() - log.createdTimestamp < 5000) return log.executor;
+        return null;
+    } catch (e) { return null; }
+}
+
 client.once('ready', () => {
-    client.user.setPresence({ activities: [], status: 'dnd' });
-    logGonder("🟢 Sistem Aktif", "Tüm denetim kayıtları ve moderasyon komutları yüklendi.", Colors.Green);
+    client.user.setPresence({ activities: [{ name: 'Geliştiriliyorum', type: ActivityType.Playing }], status: 'dnd' });
+    logGonder("🟢 Sistem Aktif", "Tüm gelişmiş denetim kayıtları ve yetkili modülleri devrede.", Colors.Green);
     console.log("Bot Aktif!");
 });
 
-// --- HOŞ GELDİN MESAJI (AİLE İFADESİ KALDIRILDI) ---
+// --- HOŞ GELDİN MESAJI ---
 client.on('guildMemberAdd', async (member) => {
     const kanal = member.guild.channels.cache.get(HOSGELDIN_KANALI_ID);
     if (!kanal) return;
@@ -67,70 +78,94 @@ client.on('guildMemberAdd', async (member) => {
     kanal.send({ content: `${member}`, embeds: [embed] });
 });
 
-// --- ÇOOOOOK DETAYLI LOG SİSTEMİ ---
+// --- EN İNCE AYRINTISINA KADAR LOG SİSTEMİ ---
 
 // 1. Silinen Mesaj
-client.on('messageDelete', message => {
-    if (message.author?.bot) return;
-    logGonder("🗑️ Mesaj Silindi", `**Kullanıcı:** ${message.author.tag}\n**Kanal:** ${message.channel}\n**İçerik:** ${message.content || "Görsel/Embed İçeriği"}`, Colors.Red);
+client.on('messageDelete', async message => {
+    if (message.author?.bot || !message.guild) return;
+    const executor = await getExecutor(message.guild, AuditLogEvent.MessageDelete);
+    const kimSildi = executor && executor.id !== message.author.id ? `<@${executor.id}>` : `<@${message.author.id}> (Kendisi)`;
+    logGonder("🗑️ Mesaj Silindi", `**Kullanıcı:** <@${message.author.id}>\n**Silen Kişi:** ${kimSildi}\n**Kanal:** <#${message.channel.id}>\n**İçerik:** \n> ${message.content || "*Mesaj içeriği metin değildi (Görsel/Embed)*"}`, Colors.Red);
 });
 
 // 2. Düzenlenen Mesaj
 client.on('messageUpdate', (oldMsg, newMsg) => {
     if (oldMsg.author?.bot || oldMsg.content === newMsg.content) return;
-    logGonder("✏️ Mesaj Düzenlendi", `**Kullanıcı:** ${oldMsg.author.tag}\n**Kanal:** ${oldMsg.channel}\n**Eski:** ${oldMsg.content}\n**Yeni:** ${newMsg.content}`, Colors.Orange);
+    logGonder("✏️ Mesaj Düzenlendi", `**Kullanıcı:** <@${oldMsg.author.id}>\n**Kanal:** <#${oldMsg.channel.id}>\n**Eski Mesaj:** \n> ${oldMsg.content}\n**Yeni Mesaj:** \n> ${newMsg.content}`, Colors.Orange);
 });
 
-// 3. İsim, Rol ve Tag Değişiklikleri
+// 3. İsim ve Rol Değişiklikleri
 client.on('guildMemberUpdate', async (oldMember, newMember) => {
-    // İsim Değişikliği
+    const executor = await getExecutor(newMember.guild, AuditLogEvent.MemberRoleUpdate) || await getExecutor(newMember.guild, AuditLogEvent.MemberUpdate);
+    const yapan = executor ? `<@${executor.id}>` : "Bilinmiyor/Kendisi";
+
     if (oldMember.nickname !== newMember.nickname) {
-        logGonder("👤 İsim Değiştirildi", `**Kullanıcı:** ${newMember.user.tag}\n**Eski:** ${oldMember.nickname || "Yok"}\n**Yeni:** ${newMember.nickname || "Yok"}`, Colors.Cyan);
+        logGonder("👤 İsim Değiştirildi", `**Kullanıcı:** <@${newMember.user.id}>\n**İşlemi Yapan:** ${yapan}\n**Eski İsim:** \`${oldMember.nickname || oldMember.user.username}\`\n**Yeni İsim:** \`${newMember.nickname || newMember.user.username}\``, Colors.Cyan);
     }
     
-    // Rol Ekleme/Silme Logları
     if (oldMember.roles.cache.size < newMember.roles.cache.size) {
         const role = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id)).first();
-        if(role) logGonder("✅ Rol Eklendi", `**Kullanıcı:** ${newMember.user.tag}\n**Rol:** ${role.name}`, Colors.Blue);
+        if(role) logGonder("✅ Rol Eklendi", `**Kullanıcı:** <@${newMember.user.id}>\n**Rolü Veren:** ${yapan}\n**Verilen Rol:** <@&${role.id}>`, Colors.Blue);
     }
+    
     if (oldMember.roles.cache.size > newMember.roles.cache.size) {
         const role = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id)).first();
-        if(role) logGonder("❌ Rol Alındı", `**Kullanıcı:** ${newMember.user.tag}\n**Rol:** ${role.name}`, Colors.Red);
+        if(role) logGonder("❌ Rol Alındı", `**Kullanıcı:** <@${newMember.user.id}>\n**Rolü Alan:** ${yapan}\n**Alınan Rol:** <@&${role.id}>`, Colors.Red);
     }
 
-    // 1991 Tag Kontrolü
     const hasTag = newMember.user.username.includes(LONCA_TAGI) || (newMember.nickname && newMember.nickname.includes(LONCA_TAGI));
     const hasRole = newMember.roles.cache.has(LONCA_ROL_ID);
     if (hasTag && !hasRole) await newMember.roles.add(LONCA_ROL_ID).catch(() => {});
     else if (!hasTag && hasRole) await newMember.roles.remove(LONCA_ROL_ID).catch(() => {});
 });
 
-// 4. Kanal Oluşturma, Silme, Düzenleme
-client.on('channelCreate', ch => logGonder("📁 Kanal Oluşturuldu", `**Ad:** ${ch.name}\n**Tür:** ${ch.type}`, Colors.Green));
-client.on('channelDelete', ch => logGonder("📁 Kanal Silindi", `**Ad:** ${ch.name}`, Colors.DarkRed));
-client.on('channelUpdate', (oldCh, newCh) => {
-    if (oldCh.name !== newCh.name) logGonder("📁 Kanal Düzenlendi", `**Eski Ad:** ${oldCh.name}\n**Yeni Ad:** ${newCh.name}`, Colors.Yellow);
+// 4. Kanal Değişiklikleri
+client.on('channelCreate', async ch => {
+    const executor = await getExecutor(ch.guild, AuditLogEvent.ChannelCreate);
+    const yapan = executor ? `<@${executor.id}>` : "Bilinmiyor";
+    logGonder("📁 Kanal Oluşturuldu", `**Kanal:** <#${ch.id}>\n**Oluşturan Yetkili:** ${yapan}\n**Kanal Adı:** \`${ch.name}\``, Colors.Green);
 });
 
-// 5. Ban, Unban ve Kick (Sunucudan Ayrılma)
-client.on('guildBanAdd', ban => logGonder("🔴 Kullanıcı Yasaklandı", `**Kullanıcı:** ${ban.user.tag}\n**Sebep:** ${ban.reason || "Belirtilmedi"}`, Colors.Red, ban.user.displayAvatarURL()));
-client.on('guildBanRemove', ban => logGonder("🔓 Yasak Kaldırıldı", `**Kullanıcı:** ${ban.user.tag}`, Colors.Green, ban.user.displayAvatarURL()));
+client.on('channelDelete', async ch => {
+    const executor = await getExecutor(ch.guild, AuditLogEvent.ChannelDelete);
+    const yapan = executor ? `<@${executor.id}>` : "Bilinmiyor";
+    logGonder("🗑️ Kanal Silindi", `**Silinen Kanal:** \`${ch.name}\`\n**Silen Yetkili:** ${yapan}`, Colors.DarkRed);
+});
 
+client.on('channelUpdate', async (oldCh, newCh) => {
+    const executor = await getExecutor(newCh.guild, AuditLogEvent.ChannelUpdate);
+    const yapan = executor ? `<@${executor.id}>` : "Bilinmiyor";
+    if (oldCh.name !== newCh.name) logGonder("📁 Kanal Düzenlendi", `**Kanal:** <#${newCh.id}>\n**Düzenleyen Yetkili:** ${yapan}\n**Eski Ad:** \`${oldCh.name}\`\n**Yeni Ad:** \`${newCh.name}\``, Colors.Yellow);
+});
+
+// 5. Ban ve Unban 
+client.on('guildBanAdd', async ban => {
+    const executor = await getExecutor(ban.guild, AuditLogEvent.MemberBanAdd);
+    const yapan = executor ? `<@${executor.id}>` : "Bilinmiyor";
+    logGonder("🔴 Kullanıcı Yasaklandı (BAN)", `**Yasaklanan:** <@${ban.user.id}>\n**Yasaklayan Yetkili:** ${yapan}\n**Sebep:** \`${ban.reason || "Belirtilmedi"}\``, Colors.Red, ban.user.displayAvatarURL());
+});
+
+client.on('guildBanRemove', async ban => {
+    const executor = await getExecutor(ban.guild, AuditLogEvent.MemberBanRemove);
+    const yapan = executor ? `<@${executor.id}>` : "Bilinmiyor";
+    logGonder("🔓 Yasak Kaldırıldı (UNBAN)", `**Kullanıcı:** <@${ban.user.id}>\n**Yasağı Kaldıran Yetkili:** ${yapan}`, Colors.Green, ban.user.displayAvatarURL());
+});
+
+// 6. Kick (Sunucudan Ayrılma / Atılma)
 client.on('guildMemberRemove', async (member) => {
-    const fetchedLogs = await member.guild.fetchAuditLogs({ limit: 1, type: AuditLogEvent.MemberKick });
-    const kickLog = fetchedLogs.entries.first();
-    if (kickLog && kickLog.target.id === member.id && kickLog.createdAt > (Date.now() - 5000)) {
-        logGonder("🟠 Kullanıcı Atıldı (Kick)", `**Atılan:** ${member.user.tag}\n**Atan:** ${kickLog.executor.tag}`, Colors.Orange, member.user.displayAvatarURL());
+    const executor = await getExecutor(member.guild, AuditLogEvent.MemberKick);
+    if (executor) {
+        logGonder("🟠 Kullanıcı Atıldı (KICK)", `**Atılan Kişi:** <@${member.user.id}>\n**Atan Yetkili:** <@${executor.id}>`, Colors.Orange, member.user.displayAvatarURL());
     } else {
-        logGonder("⚪ Sunucudan Ayrıldı", `**Kullanıcı:** ${member.user.tag}`, Colors.Grey, member.user.displayAvatarURL());
+        logGonder("⚪ Sunucudan Ayrıldı", `**Kullanıcı:** <@${member.user.id}>\n**Güncel Üye Sayısı:** ${member.guild.memberCount}`, Colors.Grey, member.user.displayAvatarURL());
     }
 });
 
-// 6. Ses Logları
+// 7. Ses Logları
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member.user.bot) return;
-    if (!oldState.channelId && newState.channelId) logGonder("📥 Sese Katılım", `**Kullanıcı:** ${newState.member.user.tag}\n**Kanal:** ${newState.channel.name}`, Colors.Green);
-    else if (oldState.channelId && !newState.channelId) logGonder("📤 Sesten Ayrılma", `**Kullanıcı:** ${oldState.member.user.tag}\n**Kanal:** ${oldState.channel.name}`, Colors.Red);
+    if (!oldState.channelId && newState.channelId) logGonder("📥 Sese Katılım", `**Kullanıcı:** <@${newState.member.user.id}>\n**Kanal:** <#${newState.channel.id}>`, Colors.Green);
+    else if (oldState.channelId && !newState.channelId) logGonder("📤 Sesten Ayrılma", `**Kullanıcı:** <@${oldState.member.user.id}>\n**Kanal:** <#${oldState.channel.id}>`, Colors.Red);
 });
 
 // --- MESAJ ETKİLEŞİMLERİ & KOMUTLAR ---
@@ -141,21 +176,20 @@ client.on('messageCreate', async (message) => {
     // SA-AS
     if (msg === 'sa') return message.reply({ content: 'Aleyküm Selam!', allowedMentions: { repliedUser: true } });
 
-    // KÜFÜR KORUMASI (İstisnasız herkesi kapsar)
+    // KÜFÜR KORUMASI (Herkese Geçerli)
     const kufurler = ['kufur1', 'kufur2']; 
     if (kufurler.some(k => msg.includes(k))) {
         await message.delete().catch(() => {});
-        return message.channel.send(`⛔ ${message.author}, bu sunucuda küfür yasak!`).then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
+        return message.channel.send(`⛔ <@${message.author.id}>, bu sunucuda küfür yasak!`).then(m => setTimeout(() => m.delete().catch(()=>null), 4000));
     }
 
     // AFK Etiket Kontrolü
     if (message.mentions.users.size > 0) {
         message.mentions.users.forEach(user => {
-            if (afklar.has(user.id)) message.reply(`⏳ **${user.username}** şu an AFK. Sebep: ${afklar.get(user.id).sebep}`).then(m => setTimeout(() => m.delete().catch(()=>null), 8000));
+            if (afklar.has(user.id)) message.reply(`⏳ <@${user.id}> şu an AFK. Sebep: **${afklar.get(user.id).sebep}**`).then(m => setTimeout(() => m.delete().catch(()=>null), 8000));
         });
     }
 
-    // AFK'dan Çıkış
     if (afklar.has(message.author.id)) {
         const data = afklar.get(message.author.id);
         afklar.delete(message.author.id);
@@ -167,95 +201,110 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(PREFIX.length).trim().split(/ +/g);
     const command = args.shift().toLowerCase();
 
-    // Ortak mesaj silme fonksiyonu
     const replyClear = (text, color = Colors.Blue) => {
         message.reply({ embeds: [new EmbedBuilder().setColor(color).setDescription(text)] }).then(m => setTimeout(() => m.delete().catch(()=>null), 10000));
     };
 
-    // 1. AFK KOMUTU
     if (command === 'afk') {
-        const sebep = args.join(" ") || "AFK";
+        const sebep = args.join(" ") || "Belirtilmedi";
         const eskiAd = message.member.displayName;
         afklar.set(message.author.id, { sebep, eskiAd });
         if (message.member.manageable) await message.member.setNickname(`[AFK] ${eskiAd}`).catch(() => {});
-        return replyClear(`💤 Başarıyla AFK oldun: **${sebep}**`, Colors.Grey);
+        return replyClear(`💤 Başarıyla AFK oldun.\n**Sebep:** ${sebep}`, Colors.Grey);
     }
 
-    // YETKİLİ KONTROLÜ
     const yetkiliKomutlar = ['ban', 'kick', 'mute', 'lock', 'unlock', 'sil', 'slowmode', 'aktif', 'join'];
     if (yetkiliKomutlar.includes(command) && !message.member.roles.cache.has(YETKILI_ROL_ID)) {
         return message.reply("❌ Yetkiniz yetersiz.").then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
     }
 
-    // 2. BAN (Özel Mesaj + Oto Silinen Cevap)
     if (command === 'ban') {
         const user = message.mentions.members.first();
         const reason = args.slice(1).join(" ") || "Sebep belirtilmedi.";
         if (!user) return message.reply("Kimi banlayayım?").then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
         if (!user.bannable) return message.reply("Bu kullanıcıyı yasaklayamam.").then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
 
-        try { await user.send(`**${message.guild.name}** sunucusundan yasaklandın. Yetkili: ${message.author.tag}, Sebep: ${reason}`); } catch (e) {}
+        try { await user.send(`**${message.guild.name}** sunucusundan yasaklandın.\nYetkili: <@${message.author.id}>\nSebep: ${reason}`); } catch (e) {}
         await user.ban({ reason: `${message.author.tag}: ${reason}` });
-        return replyClear(`🔨 **${user.user.tag}** sunucudan yasaklandı.\nSebep: ${reason}`, Colors.DarkRed);
+        return replyClear(`🔨 <@${user.id}> sunucudan yasaklandı.\n**Sebep:** ${reason}`, Colors.DarkRed);
     }
 
-    // 3. KICK
     if (command === 'kick') {
         const user = message.mentions.members.first();
         const reason = args.slice(1).join(" ") || "Sebep belirtilmedi.";
         if (!user) return message.reply("Atılacak kişiyi etiketle.");
         await user.kick(reason);
-        return replyClear(`👢 **${user.user.tag}** atıldı.\nSebep: ${reason}`, Colors.Orange);
+        return replyClear(`👢 <@${user.id}> atıldı.\n**Sebep:** ${reason}`, Colors.Orange);
     }
 
-    // 4. MUTE
     if (command === 'mute') {
         const user = message.mentions.members.first();
         const sure = args[1];
         if (!user || !sure) return message.reply("Kullanım: `.mute @etiket 10m`");
         await user.timeout(ms(sure), `${message.author.tag} tarafından susturuldu.`);
-        return replyClear(`🔇 **${user.user.tag}**, \`${sure}\` susturuldu.`, Colors.Yellow);
+        return replyClear(`🔇 <@${user.id}>, \`${sure}\` susturuldu.`, Colors.Yellow);
     }
 
-    // 5. LOCK & UNLOCK
     if (command === 'lock') {
         await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: false });
         return replyClear("🔒 Kanal başarıyla kilitlendi.", Colors.Red);
     }
+
     if (command === 'unlock') {
         await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, { SendMessages: null });
         return replyClear("🔓 Kanal kilidi açıldı.", Colors.Green);
     }
 
-    // 6. SİL (Temizle - Reply kullanmaz)
     if (command === 'sil') {
         const miktar = parseInt(args[0]);
         if (isNaN(miktar) || miktar < 1 || miktar > 100) return message.channel.send("1-100 arası sayı girin.").then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
         await message.delete().catch(() => {});
         await message.channel.bulkDelete(miktar, true).catch(() => {});
-        return message.channel.send({ embeds: [new EmbedBuilder().setColor(Colors.Aqua).setDescription(`🧹 **${miktar}** mesaj temizlendi.`)] }).then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
+        return message.channel.send({ embeds: [new EmbedBuilder().setColor(Colors.Aqua).setDescription(`🧹 **${miktar}** mesaj temizlendi. İşlemi Yapan: <@${message.author.id}>`)] }).then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
     }
 
-    // 7. SLOWMODE
     if (command === 'slowmode') {
         const saniye = ms(args[0] || "0") / 1000;
         await message.channel.setRateLimitPerUser(saniye);
         return replyClear(`⏱️ Yavaş mod **${saniye}** saniye yapıldı.`, Colors.Green);
     }
 
-    // 8. AKTİF & JOIN
+    // ÇOK DETAYLI AKTİF KOMUTU
     if (command === 'aktif') {
-        return replyClear(`✅ Sistemler ve modüller 7/24 aktif durumda! Gecikme: ${client.ws.ping}ms`, Colors.LuminousVividPink);
+        const totalBellek = (process.memoryUsage().heapTotal / 1024 / 1024).toFixed(2);
+        const kullanilanBellek = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+        let sure = client.uptime;
+        let saniye = Math.floor(sure / 1000);
+        let dakika = Math.floor(saniye / 60);
+        let saat = Math.floor(dakika / 60);
+        let gun = Math.floor(saat / 24);
+        saat %= 24; dakika %= 60; saniye %= 60;
+
+        const aktifEmbed = new EmbedBuilder()
+            .setTitle("📊 Sistem Durum Raporu (AKTİF)")
+            .setColor(Colors.LuminousVividPink)
+            .setThumbnail(client.user.displayAvatarURL())
+            .addFields(
+                { name: '🤖 Bot Durumu', value: `\`Geliştiriliyorum\` Modunda`, inline: true },
+                { name: '🏓 Gecikme (Ping)', value: `\`${client.ws.ping}ms\``, inline: true },
+                { name: '⏱️ Çalışma Süresi', value: `\`${gun} Gün, ${saat} Saat, ${dakika} Dk\``, inline: false },
+                { name: '💾 RAM Kullanımı', value: `\`${kullanilanBellek} MB / ${totalBellek} MB\``, inline: true },
+                { name: '👥 Sunucu Bilgisi', value: `\`${message.guild.memberCount}\` Üye`, inline: true },
+                { name: '⚙️ Node.js Sürümü', value: `\`${process.version}\``, inline: true }
+            )
+            .setFooter({ text: `Sorgulayan: ${message.author.tag}`, iconURL: message.author.displayAvatarURL() })
+            .setTimestamp();
+
+        return message.reply({ embeds: [aktifEmbed] }).then(m => setTimeout(() => m.delete().catch(()=>null), 15000));
     }
     
     if (command === 'join') {
         const channel = message.guild.channels.cache.get(SES_KANALI_ID);
         if (channel) joinVoiceChannel({ channelId: channel.id, guildId: channel.guild.id, adapterCreator: channel.guild.voiceAdapterCreator });
-        return replyClear(`🎤 ${channel.name} kanalına giriş yapıldı.`, Colors.Green);
+        return replyClear(`🎤 <#${channel.id}> kanalına giriş yapıldı.`, Colors.Green);
     }
 });
 
-// Otomatik Ping
 setInterval(() => { axios.get('https://miras-autorazer.onrender.com').catch(() => {}); }, 300000);
 
 client.login(process.env.TOKEN);
