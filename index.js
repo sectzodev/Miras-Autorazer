@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, EmbedBuilder, AuditLogEvent, ActivityType, Colors, ChannelType, PermissionsBitField } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, EmbedBuilder, AuditLogEvent, ActivityType, Colors, ChannelType, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } = require('discord.js');
 const { joinVoiceChannel } = require('@discordjs/voice');
 const express = require('express');
 const axios = require('axios');
@@ -78,7 +78,8 @@ async function getExecutor(guild, type) {
 }
 
 client.once('clientReady', () => {
-    client.user.setPresence({ activities: [{ name: 'sectzo❤miras', type: ActivityType.Playing }], status: 'dnd' });
+    // İzleniyor (Watching) ve "Miras Denetleniyor." olarak güncellendi.
+    client.user.setPresence({ activities: [{ name: 'Miras Denetleniyor.', type: ActivityType.Watching }], status: 'dnd' });
     console.log("----------------------------");
     console.log(`${client.user.tag} SORUNSUZ BAŞLATILDI!`);
     console.log("----------------------------");
@@ -152,7 +153,7 @@ client.on('guildBanRemove', async (ban) => {
     logGonder("🔓 Yasak Kaldırıldı", `**Kullanıcı:** <@${ban.user.id}>\n**Yetkili:** ${executor ? `<@${executor.id}>` : "Bilinmiyor"}`, Colors.Green, ban.user.displayAvatarURL());
 });
 
-// --- SES VE ÖZEL ODA SİSTEMİ ---
+// --- SES VE ÖZEL ODA SİSTEMİ (BUTONLU) ---
 client.on('voiceStateUpdate', async (oldState, newState) => {
     if (oldState.member.user.bot) return;
 
@@ -168,12 +169,32 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
                 permissionOverwrites: [
                     {
                         id: newState.member.id,
-                        allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.MuteMembers]
+                        allow: [PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.MoveMembers, PermissionsBitField.Flags.MuteMembers, PermissionsBitField.Flags.DeafenMembers]
+                    },
+                    {
+                        id: newState.guild.roles.everyone.id,
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect]
                     }
                 ]
             });
             ozelOdalar.add(channel.id);
             await newState.setChannel(channel).catch(() => channel.delete());
+
+            // --- GÖRSELDEKİ BUTON PANELİNİ KANALA GÖNDERME ---
+            const odaEmbed = new EmbedBuilder()
+                .setTitle("Miras-Autorazer - Özel Oda Sistemi")
+                .setDescription("Odanızı yönetmek için aşağıdaki butonları kullanabilirsiniz.")
+                .setColor(Colors.DarkVividPink);
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('oda_kilit').setLabel('Kanalı Kilitle / Aç').setEmoji('🔒').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('oda_gizle').setLabel('Kanalı Gizle / Aç').setEmoji('👁️').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('oda_kick').setLabel('Kullanıcı Kickle').setEmoji('🚪').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('oda_ban').setLabel('Kullanıcı Banla').setEmoji('🔨').setStyle(ButtonStyle.Danger)
+            );
+
+            await channel.send({ content: `<@${newState.member.id}>`, embeds: [odaEmbed], components: [row] });
+
         } catch (error) { console.error("Özel oda oluşturulamadı.", error); }
     }
 
@@ -181,6 +202,68 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         if (oldState.channel && oldState.channel.members.size === 0) {
             await oldState.channel.delete().catch(()=>null);
             ozelOdalar.delete(oldState.channelId);
+        }
+    }
+});
+
+// --- ÖZEL ODA BUTON ETKİLEŞİMLERİ (YENİ EKLENDİ) ---
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton() && !interaction.isUserSelectMenu()) return;
+    if (!ozelOdalar.has(interaction.channelId)) return;
+
+    if (!interaction.channel.permissionsFor(interaction.member).has(PermissionsBitField.Flags.ManageChannels)) {
+        return interaction.reply({ content: "❌ Bu odayı yönetme yetkiniz yok! Yalnızca oda sahibi kullanabilir.", ephemeral: true });
+    }
+
+    const channel = interaction.channel;
+    const everyone = interaction.guild.roles.everyone;
+
+    // Kilitle/Aç
+    if (interaction.customId === 'oda_kilit') {
+        const isLocked = channel.permissionsFor(everyone).has(PermissionsBitField.Flags.Connect) === false;
+        await channel.permissionOverwrites.edit(everyone, { Connect: isLocked ? null : false });
+        return interaction.reply({ content: isLocked ? "🔓 Oda kilidi açıldı, herkes katılabilir." : "🔒 Oda kilitlendi, kimse katılamaz.", ephemeral: true });
+    }
+
+    // Gizle/Aç
+    if (interaction.customId === 'oda_gizle') {
+        const isHidden = channel.permissionsFor(everyone).has(PermissionsBitField.Flags.ViewChannel) === false;
+        await channel.permissionOverwrites.edit(everyone, { ViewChannel: isHidden ? null : false });
+        return interaction.reply({ content: isHidden ? "👁️ Oda görünür hale getirildi." : "🙈 Oda gizlendi.", ephemeral: true });
+    }
+
+    // Kick ve Ban Menüsü Gönderme
+    if (interaction.customId === 'oda_kick' || interaction.customId === 'oda_ban') {
+        const actionText = interaction.customId === 'oda_kick' ? 'Sesten atılacak' : 'Odadan yasaklanacak';
+        const row = new ActionRowBuilder().addComponents(
+            new UserSelectMenuBuilder()
+                .setCustomId(interaction.customId === 'oda_kick' ? 'select_kick' : 'select_ban')
+                .setPlaceholder(`${actionText} kullanıcıyı seçin`)
+        );
+        return interaction.reply({ content: `Lütfen ${actionText.toLowerCase()} kullanıcıyı seçin:`, components: [row], ephemeral: true });
+    }
+
+    // Menüden Kullanıcı Seçildiğinde (Kick/Ban İşlemi)
+    if (interaction.isUserSelectMenu()) {
+        const targetId = interaction.values[0];
+        const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+
+        if (!targetMember || !targetMember.voice.channel || targetMember.voice.channelId !== interaction.channelId) {
+            return interaction.reply({ content: "❌ Kullanıcı bu odada değil!", ephemeral: true });
+        }
+        if (targetId === interaction.user.id) {
+            return interaction.reply({ content: "❌ Kendinize işlem uygulayamazsınız!", ephemeral: true });
+        }
+
+        if (interaction.customId === 'select_kick') {
+            await targetMember.voice.disconnect("Oda sahibi tarafından atıldı.");
+            return interaction.reply({ content: `🚪 <@${targetId}> sesten atıldı.`, ephemeral: true });
+        }
+
+        if (interaction.customId === 'select_ban') {
+            await targetMember.voice.disconnect("Oda sahibi tarafından yasaklandı.");
+            await channel.permissionOverwrites.edit(targetId, { Connect: false });
+            return interaction.reply({ content: `🔨 <@${targetId}> odaya girişi yasaklandı.`, ephemeral: true });
         }
     }
 });
@@ -248,7 +331,13 @@ client.on('messageCreate', async (message) => {
         const sebep = args.join(" ") || "Belirtilmedi";
         const eskiAd = message.member.displayName;
         afklar.set(message.author.id, { sebep, eskiAd });
-        if (message.member.manageable) await message.member.setNickname(`[AFK] ${eskiAd}`).catch(() => {});
+        
+        // İsmin başına [AFK] ekleme işlemi (Discord 32 karakter sınırına uygun)
+        if (message.member.manageable) {
+            let yeniAd = `[AFK] ${eskiAd}`;
+            if (yeniAd.length > 32) yeniAd = yeniAd.substring(0, 32); 
+            await message.member.setNickname(yeniAd).catch(() => {});
+        }
         return replyClear(`💤 Başarıyla AFK oldun.\n**Sebep:** ${sebep}`, Colors.Grey);
     }
 
@@ -306,17 +395,27 @@ client.on('messageCreate', async (message) => {
     }
 
     if (command === 'aktif') {
+        // Gelişmiş .aktif Komutu 
         const uptime = client.uptime;
         const gun = Math.floor(uptime / 86400000);
+        const saat = Math.floor((uptime % 86400000) / 3600000);
+        const dakika = Math.floor((uptime % 3600000) / 60000);
+        const ram = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
+        
         const aktifEmbed = new EmbedBuilder()
-            .setTitle("📊 Sistem Raporu")
+            .setTitle("📊 Gelişmiş Sistem Raporu")
             .setColor(Colors.LuminousVividPink)
+            .setThumbnail(client.user.displayAvatarURL())
             .addFields(
-                { name: '🤖 Durum', value: `\`sectzo❤miras\``, inline: true },
+                { name: '🤖 Durum', value: `\`Miras Denetleniyor.\``, inline: true },
                 { name: '🏓 Ping', value: `\`${client.ws.ping}ms\``, inline: true },
-                { name: '⏱️ Süre', value: `\`${gun} Gün\``, inline: true }
+                { name: '⏱️ Çalışma Süresi', value: `\`${gun}g ${saat}s ${dakika}d\``, inline: true },
+                { name: '💾 RAM Kullanımı', value: `\`${ram} MB\``, inline: true },
+                { name: '🌍 Sunucu Sayısı', value: `\`${client.guilds.cache.size}\``, inline: true },
+                { name: '👥 Toplam Kullanıcı', value: `\`${client.users.cache.size}\``, inline: true }
             )
-            .setFooter({ text: 'Bu mesaj silinmeyecektir.' });
+            .setFooter({ text: 'Bu mesaj silinmeyecektir. • Miras-Autorazer' })
+            .setTimestamp();
         return message.reply({ embeds: [aktifEmbed] });
     }
 });
