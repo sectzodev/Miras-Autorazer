@@ -35,6 +35,9 @@ const OZEL_ODA_OLUSTUR_ID = "1482378885612961857";
 const LONCA_TAGI = "1991"; 
 const LONCA_ROL_ID = "1482109680263237702";
 
+// GUARD GÜVENLİ (BEYAZ LİSTE) ROLLERİ
+const GUVENLI_ROLLER = ["1482109649044901940", "1482109646058815488", "1482109647275036875"];
+
 const afklar = new Map();
 const ozelOdalar = new Set();
 
@@ -77,8 +80,30 @@ async function getExecutor(guild, type) {
     } catch (e) { return null; }
 }
 
+// --- GUARD SİSTEMİ YARDIMCI FONKSİYONLARI ---
+function isSafe(member) {
+    if (!member) return true;
+    if (member.id === member.guild.ownerId) return true; // Sunucu sahibi hep güvenlidir
+    if (member.id === client.user.id) return true; // Botun kendisi
+    return member.roles.cache.some(role => GUVENLI_ROLLER.includes(role.id));
+}
+
+async function cezalandir(guild, executorId, sebep) {
+    try {
+        const uye = await guild.members.fetch(executorId).catch(() => null);
+        if (!uye) return;
+        if (uye.id === guild.ownerId || uye.id === client.user.id) return;
+
+        // Bütün yetkili/normal rollerini al (Discord tarafından yönetilen roller hariç)
+        const alinacakRoller = uye.roles.cache.filter(r => r.id !== guild.id && !r.managed).map(r => r.id);
+        if (alinacakRoller.length > 0) {
+            await uye.roles.remove(alinacakRoller).catch(() => {});
+        }
+        logGonder("🛡️ GUARD SİSTEMİ DEVREDE", `**Hedef:** <@${executorId}>\n**Eylem:** Tüm rolleri alındı.\n**Sebep:** ${sebep}`, Colors.DarkRed);
+    } catch (e) { console.error("Guard ceza hatası:", e); }
+}
+
 client.once('clientReady', () => {
-    // İzleniyor (Watching) ve "Miras Denetleniyor." olarak güncellendi.
     client.user.setPresence({ activities: [{ name: 'Miras Denetleniyor.', type: ActivityType.Watching }], status: 'dnd' });
     console.log("----------------------------");
     console.log(`${client.user.tag} SORUNSUZ BAŞLATILDI!`);
@@ -99,7 +124,7 @@ client.on('guildMemberAdd', async (member) => {
     kanal.send({ content: `${member}`, embeds: [embed] });
 });
 
-// --- FULL LOG SİSTEMİ ---
+// --- FULL LOG SİSTEMİ VE GUARD KONTROLLERİ ---
 client.on('messageDelete', async (message) => {
     if (!message.guild || message.author?.bot) return;
     const executor = await getExecutor(message.guild, AuditLogEvent.MessageDelete);
@@ -137,15 +162,62 @@ client.on('channelCreate', async (ch) => {
     logGonder("📁 Kanal Oluşturuldu", `**Kanal:** <#${ch.id}>\n**Yapan:** ${executor ? `<@${executor.id}>` : "Bilinmiyor"}`, Colors.Green);
 });
 
+// GUARD: Kanal Silinmesi
 client.on('channelDelete', async (ch) => {
     if (ozelOdalar.has(ch.id)) return;
     const executor = await getExecutor(ch.guild, AuditLogEvent.ChannelDelete);
+    
+    if (executor) {
+        const executorMember = await ch.guild.members.fetch(executor.id).catch(() => null);
+        if (!isSafe(executorMember)) {
+            await cezalandir(ch.guild, executor.id, "İzinsiz Kanal Silme");
+            await ch.clone({ name: ch.name, permissionOverwrites: ch.permissionOverwrites.cache.map(p => p) }).catch(() => {});
+        }
+    }
+
     logGonder("🗑️ Kanal Silindi", `**Adı:** \`${ch.name}\`\n**Silen:** ${executor ? `<@${executor.id}>` : "Bilinmiyor"}`, Colors.DarkRed);
 });
 
+// GUARD: Rol Silinmesi
+client.on('roleDelete', async (role) => {
+    const executor = await getExecutor(role.guild, AuditLogEvent.RoleDelete);
+    
+    if (executor) {
+        const executorMember = await role.guild.members.fetch(executor.id).catch(() => null);
+        if (!isSafe(executorMember)) {
+            await cezalandir(role.guild, executor.id, "İzinsiz Rol Silme");
+            await role.guild.roles.create({ name: role.name, color: role.color, permissions: role.permissions, hoist: role.hoist, mentionable: role.mentionable, reason: "Guard Sistemi: Silinen rol kurtarıldı." }).catch(()=>{});
+        }
+    }
+
+    logGonder("🗑️ Rol Silindi", `**Adı:** \`${role.name}\`\n**Silen:** ${executor ? `<@${executor.id}>` : "Bilinmiyor"}`, Colors.DarkRed);
+});
+
+// GUARD: Kullanıcı Yasaklanması
 client.on('guildBanAdd', async (ban) => {
     const executor = await getExecutor(ban.guild, AuditLogEvent.MemberBanAdd);
+    
+    if (executor) {
+        const executorMember = await ban.guild.members.fetch(executor.id).catch(() => null);
+        if (!isSafe(executorMember)) {
+            await cezalandir(ban.guild, executor.id, "İzinsiz Üye Yasaklama");
+            await ban.guild.members.unban(ban.user.id, "Guard Sistemi: İzinsiz ban geri alındı.").catch(() => {});
+        }
+    }
+
     logGonder("🔴 Kullanıcı Yasaklandı", `**Yasaklanan:** <@${ban.user.id}>\n**Yetkili:** ${executor ? `<@${executor.id}>` : "Bilinmiyor"}\n**Sebep:** \`${ban.reason || "Yok"}\``, Colors.Red, ban.user.displayAvatarURL());
+});
+
+// GUARD: Kullanıcı Kick (Atılması)
+client.on('guildMemberRemove', async (member) => {
+    const executor = await getExecutor(member.guild, AuditLogEvent.MemberKick);
+    if (executor) {
+        const executorMember = await member.guild.members.fetch(executor.id).catch(() => null);
+        if (!isSafe(executorMember)) {
+            await cezalandir(member.guild, executor.id, "İzinsiz Üye Atma (Kick)");
+        }
+        logGonder("👢 Kullanıcı Atıldı (Kick)", `**Atılan:** <@${member.user.id}>\n**Yetkili:** <@${executor.id}>`, Colors.Orange, member.user.displayAvatarURL());
+    }
 });
 
 client.on('guildBanRemove', async (ban) => {
@@ -180,7 +252,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             ozelOdalar.add(channel.id);
             await newState.setChannel(channel).catch(() => channel.delete());
 
-            // --- GÖRSELDEKİ BUTON PANELİNİ KANALA GÖNDERME ---
             const odaEmbed = new EmbedBuilder()
                 .setTitle("Miras-Autorazer - Özel Oda Sistemi")
                 .setDescription("Odanızı yönetmek için aşağıdaki butonları kullanabilirsiniz.")
@@ -206,7 +277,7 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     }
 });
 
-// --- ÖZEL ODA BUTON ETKİLEŞİMLERİ (YENİ EKLENDİ) ---
+// --- ÖZEL ODA BUTON ETKİLEŞİMLERİ ---
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton() && !interaction.isUserSelectMenu()) return;
     if (!ozelOdalar.has(interaction.channelId)) return;
@@ -218,21 +289,18 @@ client.on('interactionCreate', async interaction => {
     const channel = interaction.channel;
     const everyone = interaction.guild.roles.everyone;
 
-    // Kilitle/Aç
     if (interaction.customId === 'oda_kilit') {
         const isLocked = channel.permissionsFor(everyone).has(PermissionsBitField.Flags.Connect) === false;
         await channel.permissionOverwrites.edit(everyone, { Connect: isLocked ? null : false });
         return interaction.reply({ content: isLocked ? "🔓 Oda kilidi açıldı, herkes katılabilir." : "🔒 Oda kilitlendi, kimse katılamaz.", ephemeral: true });
     }
 
-    // Gizle/Aç
     if (interaction.customId === 'oda_gizle') {
         const isHidden = channel.permissionsFor(everyone).has(PermissionsBitField.Flags.ViewChannel) === false;
         await channel.permissionOverwrites.edit(everyone, { ViewChannel: isHidden ? null : false });
         return interaction.reply({ content: isHidden ? "👁️ Oda görünür hale getirildi." : "🙈 Oda gizlendi.", ephemeral: true });
     }
 
-    // Kick ve Ban Menüsü Gönderme
     if (interaction.customId === 'oda_kick' || interaction.customId === 'oda_ban') {
         const actionText = interaction.customId === 'oda_kick' ? 'Sesten atılacak' : 'Odadan yasaklanacak';
         const row = new ActionRowBuilder().addComponents(
@@ -243,7 +311,6 @@ client.on('interactionCreate', async interaction => {
         return interaction.reply({ content: `Lütfen ${actionText.toLowerCase()} kullanıcıyı seçin:`, components: [row], ephemeral: true });
     }
 
-    // Menüden Kullanıcı Seçildiğinde (Kick/Ban İşlemi)
     if (interaction.isUserSelectMenu()) {
         const targetId = interaction.values[0];
         const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
@@ -327,12 +394,33 @@ client.on('messageCreate', async (message) => {
         message.reply({ embeds: [new EmbedBuilder().setColor(color).setDescription(text)] }).then(m => setTimeout(() => m.delete().catch(()=>null), 10000));
     };
 
+    // --- YENİ JOIN (SESE KATILMA) KOMUTU ---
+    if (command === 'join' || command === 'katıl') {
+        if (!message.member.roles.cache.has(YETKILI_ROL_ID)) return message.reply("❌ Yetkiniz yetersiz.").then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
+        
+        const voiceChannelId = "1482521752667160626";
+        const channel = client.channels.cache.get(voiceChannelId);
+        
+        if (!channel) return message.reply("❌ Belirtilen ses kanalı bulunamadı.").then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
+        
+        try {
+            joinVoiceChannel({
+                channelId: channel.id,
+                guildId: channel.guild.id,
+                adapterCreator: channel.guild.voiceAdapterCreator,
+            });
+            return replyClear(`🔊 Bot <#${channel.id}> kanalına başarıyla bağlandı.`, Colors.Green);
+        } catch (error) {
+            console.error(error);
+            return message.reply("❌ Kanala bağlanırken bir hata oluştu.").then(m => setTimeout(() => m.delete().catch(()=>null), 5000));
+        }
+    }
+
     if (command === 'afk') {
         const sebep = args.join(" ") || "Belirtilmedi";
         const eskiAd = message.member.displayName;
         afklar.set(message.author.id, { sebep, eskiAd });
         
-        // İsmin başına [AFK] ekleme işlemi (Discord 32 karakter sınırına uygun)
         if (message.member.manageable) {
             let yeniAd = `[AFK] ${eskiAd}`;
             if (yeniAd.length > 32) yeniAd = yeniAd.substring(0, 32); 
@@ -395,7 +483,6 @@ client.on('messageCreate', async (message) => {
     }
 
     if (command === 'aktif') {
-        // Gelişmiş .aktif Komutu 
         const uptime = client.uptime;
         const gun = Math.floor(uptime / 86400000);
         const saat = Math.floor((uptime % 86400000) / 3600000);
