@@ -43,7 +43,7 @@ const ELEGANT_COLOR = '#2b2d31'; // Karanlık Tema ile bütünleşik renk
 const FOOTER_TEXT = 'Miras Bot | Miras System';
 
 // NOT: Gönderdiğiniz videoyu GIF'e çevirip buraya linkini koymalısınız!
-const BANNER_URL = 'https://i.imgur.com/your_video_as_gif.gif'; 
+const BANNER_URL = 'https://cdn.discordapp.com/attachments/1482526015845830826/1482745255315898581/ezgif-549c4f5ac95252e7.gif?ex=69b811a0&is=69b6c020&hm=764e8b2cd76a32bfa33811a33182a84d1ff5e51816591ff1e0828dcf998e0ff6&'; 
 
 // --- RANK (SEVİYE) VERİTABANI ---
 let xpData = {};
