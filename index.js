@@ -28,7 +28,7 @@ const { joinVoiceChannel } = require('@discordjs/voice');
 const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
-require('dotenv').config(); // .env dosyası için
+//require('dotenv').config(); // .env dosyası için
 
 // ----------------------------- //
 // 2. KISIM: WEB SUNUCUSU (UPTIME)
