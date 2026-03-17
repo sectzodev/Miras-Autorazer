@@ -85,6 +85,8 @@ const CONFIG = {
     RANK_LOG_KANALI_ID: "1482109811427512472",
     OZEL_ODA_OLUSTUR_ID: "1482378885612961857",
     BOT_SES_KANALI: "1482521752667160626",
+    ONLINE_KANAL_ID: "1483252638169436271",  // .oluştur komutuyla oluşturup buraya yapıştır
+    TOPLAM_UYE_KANAL_ID: "1483252688430039150",  // .oluştur komutuyla oluşturup buraya yapıştır
     
     // ROLLER
     YETKILI_ROL_ID: "1467952691169722422",
@@ -169,7 +171,7 @@ async function sendLog(baslik, icerik, ekstra = {}) {
                 `🕐 **Zaman:** <t:${Math.floor(Date.now()/1000)}:F>`
             ].join('\n'))
             .setColor(TASARIM.RENK)
-            .setImage(CONFIG.BANNER_URL)
+           // .setImage(CONFIG.BANNER_URL)
             .setFooter({ 
                 text: TASARIM.ALT_BILGI, 
                 iconURL: client.user.displayAvatarURL() 
@@ -766,26 +768,87 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
         }
 
         // ------------------------- //
-        // BOŞ ÖZEL ODALARI SİL
+        // BOŞ ÖZEL ODALARI SİL (DÜZELTİLMİŞ)
         // ------------------------- //
         if (oldState.channelId && ozelOdalar.has(oldState.channelId)) {
             const eskiKanal = oldState.channel;
+            
+            // Hemen kontrol et
             if (eskiKanal && eskiKanal.members.size === 0) {
+                // Biraz bekle (kanal değiştirme anında sorun olmasın)
                 setTimeout(async () => {
-                    // Hala boş mu kontrol et
-                    if (eskiKanal && eskiKanal.members.size === 0) {
-                        await eskiKanal.delete('Boş özel oda temizlendi')
-                            .catch(() => {});
-                        ozelOdalar.delete(eskiKanal.id);
-                        console.log(`🗑️ [ODA] Boş özel oda silindi.`);
+                    try {
+                        // Kanal hala var mı ve hala boş mu?
+                        const kanalHalaVar = await oldState.guild.channels.fetch(eskiKanal.id).catch(() => null);
+                        if (kanalHalaVar && kanalHalaVar.members.size === 0) {
+                            await eskiKanal.delete('Boş özel oda otomatik silindi');
+                            ozelOdalar.delete(eskiKanal.id);
+                            console.log(`🗑️ [ODA] ${eskiKanal.name} silindi (boş).`);
+                        }
+                    } catch (err) {
+                        console.error('❌ [ODA] Silme hatası:', err);
                     }
-                }, 5000); // 5 saniye bekle
+                }, 3000); // 3 saniye bekle
             }
         }
 
-    } catch (e) {
+    } catch (e) {  // <-- BU SATIR OLMALI (try'nin catch'i)
         console.error('❌ [VOICE] Ses sistemi hatası:', e);
     }
+});  // <-- BU SATIR OLMALI (voiceStateUpdate'in kapanışı)
+
+// ============================================= //
+//           İSTATİSTİK KANALLARI                 //
+// ============================================= //
+
+// ----------------------------- //
+// İSTATİSTİK KANALLARINI GÜNCELLE
+// ----------------------------- //
+async function updateStatChannels() {
+    try {
+        const guild = client.guilds.cache.first(); // İlk sunucuyu al
+        if (!guild) return;
+
+        // Kanal ID'lerini CONFIG'den al
+        const ONLINE_KANAL_ID = CONFIG.ONLINE_KANAL_ID;
+        const TOPLAM_UYE_KANAL_ID = CONFIG.TOPLAM_UYE_KANAL_ID;
+
+        // Sunucu üyelerini çek
+        await guild.members.fetch();
+        
+        const toplamUye = guild.memberCount;
+        const cevrimiciUyeler = guild.members.cache.filter(m => m.presence?.status === 'online').size;
+        const bostaUyeler = guild.members.cache.filter(m => m.presence?.status === 'idle').size;
+        const rahatsizUyeler = guild.members.cache.filter(m => m.presence?.status === 'dnd').size;
+
+        // ONLINE KANALI (Çevrimiçi + Boşta + Rahatsız)
+        const onlineKanal = guild.channels.cache.get(ONLINE_KANAL_ID);
+        if (onlineKanal) {
+            await onlineKanal.setName(`🟢 Çevrimiçi: ${cevrimiciUyeler} | 🌙 Boşta: ${bostaUyeler} | ⛔ Rahatsız: ${rahatsizUyeler}`);
+        }
+
+        // TOPLAM ÜYE KANALI
+        const uyeKanal = guild.channels.cache.get(TOPLAM_UYE_KANAL_ID);
+        if (uyeKanal) {
+            await uyeKanal.setName(`👥 Toplam Üye: ${toplamUye}`);
+        }
+
+        console.log('✅ [STATS] İstatistik kanalları güncellendi.');
+    } catch (e) {
+        console.error('❌ [STATS] Kanal güncelleme hatası:', e);
+    }
+}
+
+// ----------------------------- //
+// OTOMATİK GÜNCELLEME (Her 5 dakikada bir)
+// ----------------------------- //
+setInterval(() => {
+    updateStatChannels();
+}, 300000); // 5 dakika
+
+// Üye durumu değişince güncelle
+client.on('presenceUpdate', () => {
+    updateStatChannels();
 });
 
 // ----------------------------- //
@@ -1341,7 +1404,84 @@ client.on('messageCreate', async (message) => {
 
         message.reply({ embeds: [aktifEmbed] });
     }
+    
+// ------------------------- //
+// SHIP KOMUTU (Aşk Yüzdesi)
+// ------------------------- //
+if (komut === 'ship') {
+    const hedefKisi = message.mentions.users.first();
+    
+    if (!hedefKisi) {
+        return message.reply('❌ Lütfen shiplemek için birini etiketle! Örnek: `.ship @kullanıcı`');
+    }
+    
+    if (hedefKisi.id === message.author.id) {
+        return message.reply('❌ Kendini shipleyemezsin! Biraz dışarı çık 😄');
+    }
 
+    // Rastgele aşk yüzdesi (%0 - %100)
+    const askYuzdesi = Math.floor(Math.random() * 101);
+    
+    // Yüzdeye göre emoji ve mesaj
+    let askDurumu, askEmoji;
+    
+    if (askYuzdesi < 20) {
+        askDurumu = 'Maalesef hiç uyum yok 😅';
+        askEmoji = '💔';
+    } else if (askYuzdesi < 40) {
+        askDurumu = 'Biraz umut var gibi 🤔';
+        askEmoji = '🧡';
+    } else if (askYuzdesi < 60) {
+        askDurumu = 'OlabiLir, olabiLir... 😊';
+        askEmoji = '💛';
+    } else if (askYuzdesi < 80) {
+        askDurumu = 'Aralarında bir şeyler var! 💚';
+        askEmoji = '💚';
+    } else if (askYuzdesi < 100) {
+        askDurumu = 'Aşk kaçınılmaz! Çok yakışıyorsunuz! 💙';
+        askEmoji = '💙';
+    } else {
+        askDurumu = '💜 MÜKEMMEL EŞLEŞME! KADER SİZİ BİRLEŞTİRDİ! 💜';
+        askEmoji = '💜';
+    }
+
+    // İlerleme çubuğu oluştur
+    const barUzunluk = 15;
+    const doluBar = Math.floor((askYuzdesi / 100) * barUzunluk);
+    const bosBar = barUzunluk - doluBar;
+    const progressBar = '█'.repeat(doluBar) + '░'.repeat(bosBar);
+
+    const shipEmbed = new EmbedBuilder()
+        .setColor(TASARIM.RENK)
+        .setAuthor({ 
+            name: '💘 SHIP SİSTEMİ', 
+            iconURL: client.user.displayAvatarURL() 
+        })
+        .setDescription([
+            `## 💕 **AŞK ÖLÇER** 💕`,
+            '',
+            `**${message.author.username}** 💞 **${hedefKisi.username}**`,
+            '',
+            `\`\`\`${progressBar}\`\`\``,
+            `## **${askYuzdesi}%** ${askEmoji}`,
+            '',
+            `**Sonuç:** *${askDurumu}*`
+        ].join('\n'))
+        .setThumbnail('https://cdn.discordapp.com/emojis/1026532730625396756.gif?size=96&quality=lossless')
+        .setFooter({ 
+            text: `${message.author.username} 💘 ${hedefKisi.username}`, 
+            iconURL: message.author.displayAvatarURL() 
+        })
+        .setTimestamp();
+
+    // %100 ise özel efekt
+    if (askYuzdesi === 100) {
+        shipEmbed.setColor('#FF69B4').setImage('https://media.tenor.com/-Y2IsHeHvBsAAAAC/love-hearts.gif');
+    }
+
+    message.reply({ embeds: [shipEmbed] });
+}
+    
     // ------------------------- //
     // JOIN (SESE GİR) KOMUTU
     // ------------------------- //
