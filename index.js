@@ -839,16 +839,23 @@ async function updateStatChannels() {
     }
 }
 
-// ----------------------------- //
-// OTOMATİK GÜNCELLEME (Her 5 dakikada bir)
-// ----------------------------- //
+// 30 SANİYEDE BİR GÜNCELLE
 setInterval(() => {
     updateStatChannels();
-}, 300000); // 5 dakika
+}, 30000); // 30 saniye
 
 // Üye durumu değişince güncelle
 client.on('presenceUpdate', () => {
     updateStatChannels();
+});
+
+// Üye katılınca/ayrılınca güncelle
+client.on('guildMemberAdd', () => {
+    setTimeout(() => updateStatChannels(), 1000);
+});
+
+client.on('guildMemberRemove', () => {
+    setTimeout(() => updateStatChannels(), 1000);
 });
 
 // ----------------------------- //
