@@ -1,0 +1,272 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Poppins', sans-serif;
+}
+
+body {
+    background: #0a0a0a;
+    color: #fff;
+}
+
+.container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* SOL MENÜ */
+.sidebar {
+    width: 280px;
+    background: #1a1a1a;
+    padding: 30px 20px;
+    border-right: 1px solid #2a2a2a;
+}
+
+.logo h1 {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.logo span {
+    color: #ff00ff;
+    text-shadow: 0 0 10px #ff00ff;
+}
+
+.logo p {
+    font-size: 12px;
+    color: #888;
+}
+
+.bot-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background: #2a2a2a;
+    border-radius: 12px;
+    margin: 20px 0;
+}
+
+.status-indicator {
+    font-size: 20px;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.online { color: #00ff00; }
+.status-indicator.idle { color: #ffaa00; }
+.status-indicator.dnd { color: #ff0000; }
+.status-indicator.offline { color: #888; }
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.menu {
+    margin: 30px 0;
+}
+
+.menu-item {
+    padding: 12px 15px;
+    margin: 5px 0;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.menu-item:hover {
+    background: #2a2a2a;
+}
+
+.menu-item.active {
+    background: linear-gradient(135deg, #ff00ff20, #00ffff20);
+    border-left: 3px solid #ff00ff;
+}
+
+.server-info {
+    margin-top: 30px;
+    padding: 20px;
+    background: #2a2a2a;
+    border-radius: 12px;
+}
+
+.server-info h3 {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 10px;
+}
+
+.server-info p {
+    margin: 8px 0;
+    font-size: 14px;
+}
+
+/* SAĞ İÇERİK */
+.main-content {
+    flex: 1;
+    padding: 30px;
+    background: #0f0f0f;
+}
+
+.page {
+    display: none;
+}
+
+.page.active {
+    display: block;
+}
+
+h2 {
+    font-size: 28px;
+    margin-bottom: 30px;
+    background: linear-gradient(135deg, #ff00ff, #00ffff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* STATS KARTLARI */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    background: #1a1a1a;
+    padding: 20px;
+    border-radius: 15px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border: 1px solid #2a2a2a;
+}
+
+.stat-icon {
+    font-size: 32px;
+}
+
+.stat-info h3 {
+    font-size: 14px;
+    color: #888;
+    margin-bottom: 5px;
+}
+
+.stat-info p {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+/* LOG PANELİ */
+.logs-panel {
+    background: #1a1a1a;
+    padding: 20px;
+    border-radius: 15px;
+    border: 1px solid #2a2a2a;
+}
+
+.logs-panel h3 {
+    margin-bottom: 15px;
+    color: #888;
+}
+
+.logs-container {
+    background: #0a0a0a;
+    padding: 15px;
+    border-radius: 10px;
+    height: 300px;
+    overflow-y: auto;
+}
+
+.log {
+    padding: 8px;
+    border-bottom: 1px solid #2a2a2a;
+    font-family: monospace;
+    font-size: 12px;
+    color: #0f0;
+}
+
+/* YAPILANDIRMA KARTLARI */
+.config-card {
+    background: #1a1a1a;
+    padding: 25px;
+    border-radius: 15px;
+    border: 1px solid #2a2a2a;
+    margin-bottom: 20px;
+}
+
+.config-card h3 {
+    margin-bottom: 20px;
+    color: #ff00ff;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-size: 13px;
+    color: #888;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px;
+    background: #0a0a0a;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    outline: none;
+    border-color: #ff00ff;
+}
+
+.save-btn {
+    background: linear-gradient(135deg, #ff00ff, #00ffff);
+    color: #fff;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: 0.3s;
+}
+
+.save-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(255, 0, 255, 0.3);
+}
+
+/* ÖZEL ODA RENKLERİ */
+.oda-listesi {
+    margin-top: 20px;
+}
+
+.oda-item {
+    background: #0a0a0a;
+    padding: 10px;
+    margin: 5px 0;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.oda-sahibi {
+    color: #ff00ff;
+    font-weight: 500;
+}
