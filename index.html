@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Miras Bot Kontrol Paneli</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- SOL MENÜ -->
+        <div class="sidebar">
+            <div class="logo">
+                <h1>MİRAS<span>BOT</span></h1>
+                <p>v2.0.0</p>
+            </div>
+            
+            <div class="bot-status">
+                <div class="status-indicator" id="botStatus">●</div>
+                <span id="botStatusText">Bağlanıyor...</span>
+            </div>
+            
+            <nav class="menu">
+                <div class="menu-item active" data-page="dashboard">
+                    <span>📊</span> Dashboard
+                </div>
+                <div class="menu-item" data-page="presence">
+                    <span>🎮</span> Bot Durumu
+                </div>
+                <div class="menu-item" data-page="config">
+                    <span>⚙️</span> Yapılandırma
+                </div>
+                <div class="menu-item" data-page="komutlar">
+                    <span>📝</span> Komutlar
+                </div>
+                <div class="menu-item" data-page="odalar">
+                    <span>🔊</span> Özel Odalar
+                </div>
+                <div class="menu-item" data-page="guard">
+                    <span>🛡️</span> Guard Sistemi
+                </div>
+                <div class="menu-item" data-page="seviye">
+                    <span>📊</span> Seviye Sistemi
+                </div>
+            </nav>
+            
+            <div class="server-info">
+                <h3>SUNUCU BİLGİLERİ</h3>
+                <div id="serverStats">
+                    <p>👥 Üye: <span id="memberCount">-</span></p>
+                    <p>📊 Kanal: <span id="channelCount">-</span></p>
+                    <p>🎮 Ses: <span id="voiceCount">-</span></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SAĞ İÇERİK -->
+        <div class="main-content">
+            <!-- DASHBOARD -->
+            <div id="dashboard" class="page active">
+                <h2>Dashboard</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">⏱️</div>
+                        <div class="stat-info">
+                            <h3>Aktiflik</h3>
+                            <p id="uptime">-</p>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-info">
+                            <h3>Ping</h3>
+                            <p id="ping">- ms</p>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">💾</div>
+                        <div class="stat-info">
+                            <h3>RAM</h3>
+                            <p id="ram">- MB</p>
+                        </div>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-info">
+                            <h3>Sunucular</h3>
+                            <p id="guildCount">-</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="logs-panel">
+                    <h3>Son Loglar</h3>
+                    <div class="logs-container" id="logs">
+                        <div class="log">Bot başlatılıyor...</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- BOT DURUMU -->
+            <div id="presence" class="page">
+                <h2>Bot Durumu</h2>
+                
+                <div class="config-card">
+                    <h3>Durum Ayarları</h3>
+                    
+                    <div class="form-group">
+                        <label>Durum Tipi</label>
+                        <select id="activityType">
+                            <option value="0">Oynuyor</option>
+                            <option value="1">Yayında</option>
+                            <option value="2">Dinliyor</option>
+                            <option value="3">İzliyor</option>
+                            <option value="4">Özel</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Durum Metni</label>
+                        <input type="text" id="activityText" placeholder="Örn: sectzo ❤ miras">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Bot Durumu</label>
+                        <select id="statusType">
+                            <option value="online">🟢 Çevrimiçi</option>
+                            <option value="idle">🌙 Boşta</option>
+                            <option value="dnd">⛔ Rahatsız Etmeyin</option>
+                            <option value="invisible">⚫ Görünmez</option>
+                        </select>
+                    </div>
+                    
+                    <button class="save-btn" onclick="updatePresence()">Durumu Güncelle</button>
+                </div>
+            </div>
+            
+            <!-- YAPILANDIRMA -->
+            <div id="config" class="page">
+                <h2>Yapılandırma</h2>
+                
+                <div class="config-card">
+                    <h3>Genel Ayarlar</h3>
+                    
+                    <div class="form-group">
+                        <label>Prefix</label>
+                        <input type="text" id="prefix" value=".">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Lonca Tagı</label>
+                        <input type="text" id="loncaTag" value="1991">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Banner URL</label>
+                        <input type="text" id="bannerUrl" value="https://cdn.discordapp.com/...">
+                    </div>
+                    
+                    <button class="save-btn" onclick="updateConfig()">Ayarları Kaydet</button>
+                </div>
+                
+                <div class="config-card">
+                    <h3>Kanal ID'leri</h3>
+                    
+                    <div class="form-group">
+                        <label>Log Kanalı</label>
+                        <input type="text" id="logKanali" placeholder="Kanal ID">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Hoş Geldin Kanalı</label>
+                        <input type="text" id="hosgeldinKanali" placeholder="Kanal ID">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Özel Oda Oluşturma Kanalı</label>
+                        <input type="text" id="ozelOdaKanali" placeholder="Kanal ID">
+                    </div>
+                    
+                    <button class="save-btn" onclick="updateChannelIds()">Kanal ID'lerini Kaydet</button>
+                </div>
+                
+                <div class="config-card">
+                    <h3>Rol ID'leri</h3>
+                    
+                    <div class="form-group">
+                        <label>Yetkili Rolü</label>
+                        <input type="text" id="yetkiliRolu" placeholder="Rol ID">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Lonca Rolü</label>
+                        <input type="text" id="loncaRolu" placeholder="Rol ID">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Güvenli Roller</label>
+                        <input type="text" id="guvenliRoller" placeholder="ID, ID, ID (virgülle ayır)">
+                    </div>
+                    
+                    <button class="save-btn" onclick="updateRoles()">Rol ID'lerini Kaydet</button>
+                </div>
+            </div>
+            
+            <!-- KOMPUTLAR -->
+            <div id="komutlar" class="page">
+                <h2>Komutlar</h2>
+                
+                <div class="config-card">
+                    <h3>Komut Ayarları</h3>
+                    
+                    <div class="form-group">
+                        <label>Küfür Filtresi</label>
+                        <select id="kufurFiltre">
+                            <option value="true">Aktif</option>
+                            <option value="false">Pasif</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Reklam Filtresi</label>
+                        <select id="reklamFiltre">
+                            <option value="true">Aktif</option>
+                            <option value="false">Pasif</option>
+                        </select>
+                    </div>
+                    
+                    <h4 style="margin-top: 20px;">Özel Komutlar</h4>
+                    <div id="ozelKomutlar"></div>
+                    
+                    <button class="save-btn" style="margin-top: 10px;" onclick="addCustomCommand()">➕ Yeni Komut Ekle</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
